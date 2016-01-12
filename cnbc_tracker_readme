@@ -1,0 +1,52 @@
+
+CNBC Tracker Setup
+
+Gmail account setup
+NBCU Gail (sp?) setup
+NBCU Distro List Inclusion
+Add tab to main xls w/ gmail account w/ assignee (spelling counts & case sensitive)
+Add last run to main XLS (Lists tab)
+Update script (attach scipt doc)
+	replace this, [change to new gmail account - remove brackets], w/ gmail account
+Add script to new gmail account
+http://screencast.com/t/fmTOjfzYg
+http://screencast.com/t/9J0uTp8s
+http://screencast.com/t/9J0uTp8s
+	'[change to new gmail account - remove brackets]_logger_first_msg'
+log into gmail account
+	create label 'logged'
+	add google scripts to gdrive
+	create script, editing for trafficker
+	test run script (authorizing access to specific apps)
+	schedule trigger for every 5 mins.
+		http://screencast.com/t/LNp1UQus1fAJ
+		http://screencast.com/t/LNp1UQus1fAJ
+	update to reflect the new last run row:
+		listssheet.getRange([this should be the row number of the new account in the 'Lists' tab],9).setValue(lastrundate); 
+	star script, spreadsheet, etc for easy access
+Run first time to enable access
+	http://screencast.com/t/dPD3OGSk20v
+	http://screencast.com/t/d9jozi7NgQp
+		If prompted, allow access to google account apps (drive, gmail, etc)
+Update cnbc request design doc w/ new creds
+
+Add tab for new gmail account to http://bit.ly/cnbcrequests_view
+Use importrange using XLS key & updating tab name - 
+=IMPORTRANGE("1n203IaTH0Ppbns8nt6Hy7evZEdlQCkY2zfm_N29-EnU", "[new gmail account here (remove brackets)]!A:R")
+
+CNBC tracker archive closed requests.
+Log in w/ cnbctraffickers@gmail.com
+open http://bit.ly/cnbcrequests
+Open Script:  http://screencast.com/t/Cmr4YWahv
+Update archive closed request function:  http://screencast.com/t/o4B4UtMrY
+Click Save and close window
+
+
+
+
+
+**********************
+
+This is the doc you and your traffickers access/edit (please dont change tab names):   http://bit.ly/cnbcrequests
+This is the link you give to whoever wants visibility (read only) to the requests:  http://bit.ly/cnbcrequests_view
+This is so I remember how this was setup since it's somewhat different than the NHL one:  http://bit.ly/cnbcrequests_design
