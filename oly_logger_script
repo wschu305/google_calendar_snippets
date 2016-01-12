@@ -1,0 +1,148 @@
+
+
+/**
+* Creates an issue log entry within a Google spreadsheet for each new gmail thread, 
+* ignoring subsequent messages in the same thread.
+*
+* The email body and attachment(s) are saved to a Google drive folder.
+* URL link to the folder is saved in the Google spreadsheet.
+*
+* Comments, questions, inquiries please contact will.chu@infinitive.com 
+* updated 2/1/14 10pm - added trycatch err handling
+* updated 2/6 to improve folder and attachment handling
+* updated 2/6 pm to chk if the first msg in a thread was logged
+* 
+*/
+
+function olyloggerfirstmsg()
+{
+
+/**
+* Before executing, update the Spreadsheet key value below.  look for key= in the spreadsheet URL 
+*/    
+  
+//read unread mail in inbox.  script requires read/write access to gmail account.
+var threads = GmailApp.getInboxThreads();
+var ss = SpreadsheetApp.openById("0ArxcAKQs0QCpdGU3VDVFMFlnWWg3LWNWTzM1b2h2M0E");  //[update w/ spreadsheet key]
+Logger.log("threads.length: "+threads.length);
+
+// for every thread and unread message, parse sender, subject, body, received date/time, email id, etc
+for (var i = 0; i < threads.length; i++) {
+	
+	var msgIdExists = "false";
+	var threadid = threads[i].getId();
+	var messages = threads[i].getMessages();
+
+	for (var j = 0; j < messages.length; j++) {
+		if(j=0){
+		//check if first msg id is already logged
+		var row = 1;
+		do
+		{
+			//msgIdExists = "true";
+			row++;
+		}while(ss.getSheets()[0].getRange(row,3).getValue()<>"" && messages[0].getId()<>ss.getSheets()[0].getRange(row,4).getValue());
+
+		if(messages[0].getId() == ss.getSheets()[0].getRange(row,4).getValue()) {
+			msgIdExists = "true";
+		}
+
+		//if not, then log it
+		if(msgIdExists == "false"){
+			//placeholder
+			//Store in google sheet
+			var lastRow = ss.getLastRow();
+			Logger.log("Next Row: " + lastRow+1);
+
+			ss.getSheets()[0].getRange(lastRow+1,1).setValue(messages[j].getDate()); 
+			ss.getSheets()[0].getRange(lastRow+1,2).setValue(messages[j].getSubject());
+			ss.getSheets()[0].getRange(lastRow+1,3).setValue(messages[j].getFrom());
+			ss.getSheets()[0].getRange(lastRow+1,4).setValue(messages[j].getId());
+			ss.getSheets()[0].getRange(lastRow+1,5).setValue(threads[i].getId());
+			
+			ss.getSheets()[0].getRange(lastRow+1,13).setFormula("=(if(L"+(lastRow+1)+"=\"\",networkdays(now()-A"+(lastRow+1)+"),networkdays(L"+(lastRow+1)+"-A"+(lastRow+1)+"))*24)");
+			Logger.log("added formula");
+
+			var msgid = messages[j].getId().concat(" - " + messages[j].getSubject().substring(0,65));
+			Logger.log("drive foldername:  " + msgid);
+			
+			//[store in gdrive, pull back gdrive folder URL, shared]
+			var createdFolder = DriveApp.createFolder(msgid);
+			//var folders = DriveApp.getFoldersByName(msgid);
+			var createdFolderId = createdFolder.getId();
+			var folder = DriveApp.getFolderById(createdFolderId);
+			Logger.log("createdFolderId: " + createdFolderId);			
+			Logger.log("msgid: (should be folder name)  " + msgid);
+
+				//while (folders.hasNext()) {
+					//var folder = folders.next();
+			try{		
+				Logger.log("retrieved folder id:  " + folder.getId());
+				if(createdFolderId=folder.getId()){
+					try{
+						folder.createFile(messages[j].getSubject(), messages[j].getPlainBody(), MimeType.PLAIN_TEXT);
+					}catch(err){  
+						Logger.log("createfile error:  " + err);
+						folder.createFile(messages[j].getSubject(), messages[j].getRawContent(), MimeType.PLAIN_TEXT);
+					}
+
+					//iterate attachments and create files
+					var attachments = messages[j].getAttachments();
+					ss.getSheets()[0].getRange(lastRow+1,7).setValue(attachments.length); 
+					Logger.log("attach length:  " + attachments.length);
+
+					for (var k = 0; k < attachments.length; k++) {
+						var file = attachments[k];
+						folder.createFile(file);
+						//Logger.log("file created:  " + k);
+					}   
+					Logger.log("after file loop for:  " + k);
+					ss.getSheets()[0].getRange(lastRow+1,6).setValue(folder.getUrl());
+					//end iterate
+
+					folder.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.EDIT);
+					Logger.log("shared folder name:  " + folder.getName());
+
+				}
+			}catch(err){
+				Logger.log("create folder catch err:  ");
+			}
+					/**
+                    *reply confirm receipt w/ URL
+					*var emails = "will.chu@nbcuni.com";//,;
+					*var name="";
+					*var createdate="";
+					*var holddate="";
+					*var fileid="";
+					*var day = new Date();
+					*var d = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+					*var subjectline = "Email Logger Issue Logged " + d;
+					*var foldername = ""
+					*
+					*Logger.log(foldername.concat("About to send email to " + emails + " with subject line: " + subjectline));  
+					*
+					*MailApp.sendEmail({
+					*to: emails,//, brgnvvosvrbqd@tumblr.com
+					*subject: subjectline,
+					*htmlBody: folder.getUrl()
+					*}); 
+					*
+					*Logger.log(foldername.concat("Email block executed: " + d));   
+					*/
+
+					//wrap up - mark msg read and archive to remove from inbox.
+					messages[j].markRead();
+					threads[i].moveToArchive();
+				//} 
+			}
+		} //j=0 for	
+			
+			//msg is not initial submission, so ignore - mark read and archive.
+			if(j>0 && messages.length>1 ){
+				threads[i].markRead();	
+				threads[i].moveToArchive();
+				Logger.log("msg.lgth>1, thread marked read and moved to archive");
+			}
+		}  //msg for		
+	}
+}
