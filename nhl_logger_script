@@ -1,0 +1,143 @@
+/**
+* Creates an issue log entry within a Google spreadsheet for each new gmail thread, 
+* ignoring subsequent messages in the same thread.
+*
+* The email body and attachment(s) are saved to a Google drive folder.
+* URL link to the folder is saved in the Google spreadsheet.
+*
+* This script will chk to see if the subject references NHLCA
+*
+* Comments, questions, inquiries please contact will.chu@infinitive.com 
+*/
+
+function emaillogger_nhlca()
+{
+
+/**
+* Before executing, update the Spreadsheet key value below.  look for key= in the spreadsheet URL 
+*/    
+  
+//read unread mail in inbox.  script requires read/write access to gmail account.
+var threads = GmailApp.getInboxThreads();
+var ss = SpreadsheetApp.openById("0AidKR4kP8NiOdGdrc2JWUW9FNWkybTZfaWRuNUY4S0E");  //[update w/ spreadsheet key]
+Logger.log("threads.length: "+threads.length);
+// for every thread and unread message, parse sender, subject, body, received date/time, email id, etc
+
+for (var i = 0; i < threads.length; i++) {
+
+	var threadid = threads[i].getId();
+	var messages = threads[i].getMessages();
+
+	for (var j = 0; j < messages.length; j++) {
+	
+		//Logger.log("threadsId() - messagesId(): " + threads[i].getId() +" - "+ messages[j].getId());
+		Logger.log("message subject: "+messages[j].getSubject());
+		Logger.log("messages.length:  "+messages.length);
+
+		//Log info if unread message in thread
+		if(messages.length<2 && messages[j].isUnread()){ //made chg to ignore emails after the initial request. 2/1/14
+
+			//Logger.log("Unread threadsId() - messagesId(): " + threads[i].getId() +" - "+ messages[j].getId());
+			//Store in google sheet
+			var lastRow = ss.getLastRow();
+			Logger.log("Next Row: " + lastRow+1);
+
+			ss.getSheets()[0].getRange(lastRow+1,1).setValue(messages[j].getDate()); 
+			ss.getSheets()[0].getRange(lastRow+1,2).setValue(messages[j].getSubject());
+			ss.getSheets()[0].getRange(lastRow+1,3).setValue(messages[j].getFrom());
+			ss.getSheets()[0].getRange(lastRow+1,4).setValue(messages[j].getId());
+			ss.getSheets()[0].getRange(lastRow+1,5).setValue(threads[i].getId());
+			
+			// if including aged formula, then dble check the close date column
+			ss.getSheets()[0].getRange(lastRow+1,12).setFormula("=(if(K"+(lastRow+1)+"=\"\",now()-A"+(lastRow+1)+",K"+(lastRow+1)+"-A"+(lastRow+1)+")*24)");
+			Logger.log("added formula");
+
+			//This part checks to see if the email is NHL CA related & updates col 6 w/ the results.
+			var nhlcaexists = messages[j].getSubject().indexOf("NHL CA");
+			if(nhlcaexists <0){ 
+				nhlcaexists = messages[j].getSubject().indexOf("NHLCA");
+			}
+			if(nhlcaexists <0){ 
+				nhlcaexists = messages[j].getSubject().indexOf("nhl ca");
+			}	          
+			if(nhlcaexists <0){ 
+				nhlcaexists = messages[j].getSubject().indexOf("nhlca");
+			}	          
+            		Logger.log("nhlcaexists: "+nhlcaexists);
+			
+            		if(nhlcaexists>-1){
+				ss.getSheets()[0].getRange(lastRow+1,8).setValue("NHLCA");
+			} else {
+				ss.getSheets()[0].getRange(lastRow+1,8).setValue("NHL");
+			}
+			
+			var msgid = messages[j].getId().concat(" - " + messages[j].getSubject().substring(0,65));
+			Logger.log("drive foldername:  " + msgid);
+			
+			//[store in gdrive, pull back gdrive folder URL, shared]
+			var createdFolder = DriveApp.createFolder(msgid);
+			var folders = DriveApp.getFoldersByName(msgid);
+			Logger.log("msgid: (should be folder name)  " + msgid);
+
+				while (folders.hasNext()) {
+					var folder = folders.next();
+					Logger.log("retrieved folder id:  " + folder.getId());
+
+					try{
+						folder.createFile(messages[j].getSubject(), messages[j].getPlainBody(), MimeType.PLAIN_TEXT);
+					}catch(err){  
+						Logger.log("createfile error:  " + err);
+						folder.createFile(messages[j].getSubject(), messages[j].getRawContent(), MimeType.PLAIN_TEXT);
+					}
+
+					//iterate attachments and create files
+					var attachments = messages[j].getAttachments();
+					ss.getSheets()[0].getRange(lastRow+1,7).setValue(attachments.length); 
+					for (var k = 0; k < attachments.length; k++) {
+						var file = attachments[k];
+						folder.createFile(file);
+					}   
+					ss.getSheets()[0].getRange(lastRow+1,6).setValue(folder.getUrl()); 
+					folder.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.EDIT);
+					Logger.log("shared folder name:  " + folder.getName());
+
+					/**
+                    			*reply confirm receipt w/ URL
+					*var emails = "will.chu@nbcuni.com";//,;
+					*var name="";
+					*var createdate="";
+					*var holddate="";
+					*var fileid="";
+					*var day = new Date();
+					*var d = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+					*var subjectline = "Email Logger Issue Logged " + d;
+					*var foldername = ""
+					*
+					*Logger.log(foldername.concat("About to send email to " + emails + " with subject line: " + subjectline));  
+					*
+					*MailApp.sendEmail({
+					*to: emails,//, brgnvvosvrbqd@tumblr.com
+					*subject: subjectline,
+					*htmlBody: folder.getUrl()
+					*}); 
+					*
+					*Logger.log(foldername.concat("Email block executed: " + d));   
+					*/
+
+					//wrap up - mark msg read and archive to remove from inbox.
+					messages[j].markRead();
+					threads[i].moveToArchive();
+                    			Logger.log("msg from "+messages[j].getFrom()+" marked read & archived");
+				} 
+			}
+			
+			//msg is not initial submission, so ignore - mark read and archive.
+			if(messages.length>1 ){
+				threads[i].markRead();	
+				threads[i].moveToArchive();
+				Logger.log("msg.lgth>1, thread marked read and moved to archive");
+			}
+		}
+
+	}
+}
