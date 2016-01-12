@@ -1,0 +1,48 @@
+/**
+ * Lists the calendars shown in the user's calendar list.
+ */
+function listCalendars() {
+
+ // Determines how many calendars the user can access.
+ var calendars = CalendarApp.getAllCalendars();
+ Logger.log('This user owns or is subscribed to %s calendars.',
+     calendars.length);
+  
+for (var i = 0; i < calendars.length; i++) {
+   Logger.log('This user owns or is subscribed to',calendars[i].getName());
+      
+      }
+
+  
+  var ss = SpreadsheetApp.openById("1J-yXKbpQacUWJRKgM3fN6fWbFj5LeXNSqn6QtCxtKnw");  
+var sheet = ss.getSheetByName("OOO"); 
+  var cseCalendars = CalendarApp.getCalendarsByName('CSE OOO and Vacation Calendar');
+  
+  var now = new Date();
+  var oneDayFromNow = new Date(now.getTime() + (48 * 60 * 60 * 1000));
+  var startDate = new Date(2015,6,1);
+  var endDate = new Date(2015,11,31);
+ Logger.log('Found %s matching calendars.', cseCalendars.length);
+   var events = cseCalendars[0].getEvents(startDate, endDate)
+ Logger.log('Number of events: ' + events.length);
+   
+  for (var j = 0; j < events.length; j++) {
+ Logger.log('event details: ' + events[j].getTitle());
+     Logger.log('event start: ' + events[j].getStartTime());
+     Logger.log('event end: ' + events[j].getEndTime);
+      
+  sheet.getRange(j+2,1).setValue(events[j].getStartTime()); 
+  sheet.getRange(j+2,2).setValue(events[j].getEndTime()); 
+  sheet.getRange(j+2,3).setValue(events[j].getTitle()); 
+    sheet.getRange(j+2,4).setValue("=networkdays("+sheet.getRange(j+2,1).getA1Notation()+","+sheet.getRange(j+2,2).getA1Notation()+")"); 
+    sheet.getRange(j+2,5).setValue("=month("+sheet.getRange(j+2,1).getA1Notation()+")");
+    sheet.getRange(j+2,6).setValue("=trim(mid(trim("+sheet.getRange(j+2,3).getA1Notation()+"),1,find(\" \",trim("+sheet.getRange(j+2,3).getA1Notation()+") ,1)))");
+    
+    //=trim(mid("+sheet.getRange(j+2,3).getA1Notation()+",1,find(" ","+sheet.getRange(j+2,3).getA1Notation()+",1)))
+    
+    
+  } 
+  
+ 
+
+}
