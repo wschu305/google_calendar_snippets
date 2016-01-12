@@ -1,0 +1,113 @@
+function myFunction() {
+  
+  // open master spreadsheet
+  // target specific sheet
+  // [update w/ spreadsheet key]
+
+  var archLabel = "qa_customer_mdm_sir_archived";
+  var label = "qa_customer_mdm_sir";
+  
+  var ss = SpreadsheetApp.openById("1jPX8QTxXwZuhmihtsHA33C3l4wphrBqr4frq8f-aeZc");  
+  var sheet = ss.getSheetByName("sirSandbox");
+  Logger.log("sheet.getRange(1,1).getValue: "+sheet.getRange(1,1).getValue());
+  
+var origLabel = GmailApp.getUserLabelByName(label);  
+  var threads = GmailApp.getUserLabelByName(label).getThreads();
+
+  
+  Logger.log("threads.length: "+threads.length);
+  for (var i = 0; i < threads.length; i++) {
+   var messages = threads[i].getMessages(); 
+    
+    for (var j = 0; j < messages.length; j++) {
+
+      Logger.log("messages[j].getSubject: "+messages[j].getSubject());
+      var lastRow = sheet.getLastRow();
+      Logger.log("Next Row: " + lastRow+1);      
+      
+      sheet.getRange(lastRow+1,1).setValue(messages[j].getDate()); 
+      sheet.getRange(lastRow+1,2).setValue(messages[j].getSubject());
+      sheet.getRange(lastRow+1,3).setValue(messages[j].getFrom());
+      sheet.getRange(lastRow+1,4).setValue(messages[j].getId());
+      sheet.getRange(lastRow+1,5).setValue(threads[i].getId());      
+      
+      var msgid = messages[j].getId().concat(" - " + messages[j].getSubject().substring(0,65));
+      Logger.log("drive foldername:  " + msgid);
+      
+      try{
+              //var qaFolder = DocsList.getFolder("QA_SIRS");
+              //Logger.log("qaFolder: " + qaFolder);	
+              //[store in gdrive, pull back gdrive folder URL, shared]
+              var qaFolders = DriveApp.getFoldersByName("QA_SIRS");
+              while (qaFolders.hasNext()) {
+                 var qaFolder = qaFolders.next();
+                 Logger.log(qaFolder.getName());
+               }
+                            
+              //var createdFolder = DriveApp.createFolder(msgid);
+              var createdFolder = qaFolder.createFolder(msgid);
+              
+              //var folders = DriveApp.getFoldersByName(msgid);
+              var createdFolderId = createdFolder.getId();
+              var folder = DriveApp.getFolderById(createdFolderId);
+              Logger.log("createdFolderId: " + createdFolderId);			
+              Logger.log("msgid: (should be folder name)  " + msgid);
+
+				//while (folders.hasNext()) {
+				//var folder = folders.next();
+					
+				Logger.log("retrieved folder id:  " + folder.getId());
+				if(createdFolderId=folder.getId()){
+					try{
+						//folder.createFile(messages[j].getSubject(), messages[j].getPlainBody(), MimeType.PLAIN_TEXT);
+                        folder.createFile(messages[j].getSubject(), messages[j].getPlainBody(), MimeType.RTF);
+					}catch(err){  
+						Logger.log("createfile error:  " + err);
+						//folder.createFile(messages[j].getSubject(), messages[j].getRawContent(), MimeType.PLAIN_TEXT);
+                        folder.createFile(messages[j].getSubject(), messages[j].getRawContent(), MimeType.RTF);
+					}
+
+					//iterate attachments and create files
+					var attachments = messages[j].getAttachments();
+					sheet.getRange(lastRow+1,7).setValue(attachments.length); 
+					Logger.log("attach length:  " + attachments.length);
+
+					for (var k = 0; k < attachments.length; k++) {
+						var file = attachments[k];
+						folder.createFile(file);
+						//Logger.log("file created:  " + k);
+					}   
+					Logger.log("after file loop for:  " + k);
+                  
+					if(folder.getUrl()==""){
+						sheet.getRange(lastRow+1,6).setValue("https://docs.google.com/folderview?id="+createdFolderId+"&usp=drivesdk");
+					}else{
+						sheet.getRange(lastRow+1,6).setValue(folder.getUrl());
+					}
+					//end iterate
+
+					folder.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.EDIT);
+					Logger.log("shared folder name:  " + folder.getName());
+					Logger.log("shared folder folder.getUrl():  " + folder.getUrl());
+					Logger.log("lastRow+1:  " + lastRow+1);
+				}
+			}catch(err){
+				Logger.log("create folder catch err:  ");
+                		sheet.getRange(lastRow+1,6).setValue("Reference email from sender");
+			}
+					//wrap up - mark msg read and archive to remove from inbox.
+					messages[j].markRead();
+                    threads[i].removeLabel(origLabel);
+                    var archLabel = GmailApp.getUserLabelByName("qa_customer_mdm_sir_archived");
+                    threads[i].addLabel(archLabel);
+					//threads[i].moveToArchive();
+      
+      //nhl_logger_ack_email(messages[j], ss, lastRow);
+      Logger.log("first msg, thread marked read and moved to archive");
+			
+    }
+    
+  }
+ var lastrundate = new Date()
+  sheet.getRange(6,2).setValue(lastrundate);   
+}
