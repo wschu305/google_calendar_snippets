@@ -1,0 +1,232 @@
+/**
+* Creates an issue log entry within a Google spreadsheet for each new gmail thread, 
+* ignoring subsequent messages in the same thread.
+*
+* The email body and attachment(s) are saved to a Google drive folder.
+* URL link to the folder is saved in the Google spreadsheet.
+*
+* Comments, questions, inquiries please contact will.chu@infinitive.com 
+* updated 2/1/14 10pm - added trycatch err handling
+* updated 2/6 to improve folder and attachment handling
+* updated 2/6 pm to chk if the first msg in a thread was logged
+* updated 2/19 pm to move aged to col 10 (edits to sheet reqd - data valid)
+* updated 2/20 pm to include ack email
+* updated 3/5 pm to include closed copy and closed ack, not activated.
+* updated 3/5 pm to include closed copy and closed ack, and activated.
+* updated 3/12 PM to use labels to check already logged, not activated.
+* updated 3/13 PM added try catch to email functions & added sheet to include ack/closed sent status.
+* updated 5/2 AM moved qa owner col to the right of closed date, updated ack date and close date to col 17 & 18
+* updated 5/14 PM tweaked for cnbc trafficker specific gmail accounts and tabs.  no ack no closed no auto archive
+* updated 5/15 AM for trafficker specific tab and dynamic owner name
+*/
+
+function cnbcads1_logger_first_msg()
+{
+// open master spreadsheet
+// target specific sheet
+// [update w/ spreadsheet key]
+var ss = SpreadsheetApp.openById("1n203IaTH0Ppbns8nt6Hy7evZEdlQCkY2zfm_N29-EnU");  
+var sheet = ss.getSheetByName("[change to new gmail account - remove brackets]");
+var owner = sheet.getRange(1,19).getValue();
+
+// retrieve gmail threads
+// read inbox.  script requires read/write access to gmail account.
+var threads = GmailApp.getInboxThreads();
+Logger.log("threads.length: "+threads.length);
+
+for (var i = 0; i < threads.length; i++) {
+	
+	var msgIdExists = "false";
+	var threadid = threads[i].getId();
+  
+	// label logic
+	var labels = threads[i].getLabels();
+	var label = GmailApp.getUserLabelByName("logged");
+	var labelName = "";
+	Logger.log("labels: "+labels);
+	Logger.log("labels.length: "+labels.length);
+	if(labels.length>0){var labelName = labels[0].getName();}
+	Logger.log("thread labelName: "+labelName);
+  
+	var messages = threads[i].getMessages();
+    	Logger.log("messages.length: "+messages.length);
+	for (var j = 0; j < messages.length; j++) {
+		if(j==0){
+		//check if first msg id is already logged
+		var row = 1;
+
+		//if not, then log it
+		if(labelName != "logged"){
+			//placeholder
+			//Store in google sheet
+			var lastRow = sheet.getLastRow();
+			Logger.log("Next Row: " + lastRow+1);
+
+			// pull pertinent info
+			// enter into specific sheet
+			sheet.getRange(lastRow+1,1).setValue(messages[j].getDate()); 
+			sheet.getRange(lastRow+1,2).setValue(messages[j].getSubject());
+			sheet.getRange(lastRow+1,3).setValue(messages[j].getFrom());
+			sheet.getRange(lastRow+1,4).setValue(messages[j].getId());
+			sheet.getRange(lastRow+1,5).setValue(threads[i].getId());
+			sheet.getRange(lastRow+1,8).setValue("Task");
+            		sheet.getRange(lastRow+1,9).setValue(owner);
+          
+			//sheet.getRange(lastRow+1,13).setFormula("=(if(L"+(lastRow+1)+"=\"\",now()-A"+(lastRow+1)+",L"+(lastRow+1)+"-A"+(lastRow+1)+")*24)");
+			//Logger.log("added formula");
+			//if including aged formula, then dble check the close date column
+			//sheet.getRange(lastRow+1,12).setFormula("=(if(K"+(lastRow+1)+"=\"\",now()-A"+(lastRow+1)+",K"+(lastRow+1)+"-A"+(lastRow+1)+")*24)");
+			//sheet.getRange(lastRow+1,12).setFormula("=(if(K"+(lastRow+1)+"=\"\",NETWORKDAYS(A"+(lastRow+1)+", now()),NETWORKDAYS(A"+(lastRow+1)+", K"+(lastRow+1)+")))");
+            		sheet.getRange(lastRow+1,10).setFormula("=(if(L"+(lastRow+1)+"=\"\",NETWORKDAYS(A"+(lastRow+1)+", now()),NETWORKDAYS(A"+(lastRow+1)+", L"+(lastRow+1)+")))");
+          		Logger.log("added formula");
+          		sheet.getRange(lastRow+1,11).setValue("Open");
+          		sheet.getRange(lastRow+1,13).setValue("TBD");
+          		sheet.getRange(lastRow+1,17).setValue("NA");
+          		sheet.getRange(lastRow+1,18).setValue("NA");
+          		
+			var msgid = messages[j].getId().concat(" - " + messages[j].getSubject().substring(0,65));
+			Logger.log("drive foldername:  " + msgid);
+			
+            try{
+              //[store in gdrive, pull back gdrive folder URL, shared]
+              var createdFolder = DriveApp.createFolder(msgid);
+              //var folders = DriveApp.getFoldersByName(msgid);
+              var createdFolderId = createdFolder.getId();
+              var folder = DriveApp.getFolderById(createdFolderId);
+              Logger.log("createdFolderId: " + createdFolderId);			
+              Logger.log("msgid: (should be folder name)  " + msgid);
+
+				//while (folders.hasNext()) {
+				//var folder = folders.next();
+					
+				Logger.log("retrieved folder id:  " + folder.getId());
+				if(createdFolderId=folder.getId()){
+					try{
+                        //Logger.log("messages[j].getPlainBody():  " + messages[j].getPlainBody());
+						//folder.createFile(messages[j].getSubject(), messages[j].getPlainBody(), MimeType.PLAIN_TEXT);
+                        folder.createFile(messages[j].getSubject(), messages[j].getPlainBody(), MimeType.RTF);
+					}catch(err){  
+						Logger.log("createfile error:  " + err);
+						//folder.createFile(messages[j].getSubject(), messages[j].getRawContent(), MimeType.PLAIN_TEXT);
+                        folder.createFile(messages[j].getSubject(), messages[j].getRawContent(), MimeType.RTF);
+					}
+
+					//iterate attachments and create files
+					var attachments = messages[j].getAttachments();
+					sheet.getRange(lastRow+1,7).setValue(attachments.length); 
+					Logger.log("attach length:  " + attachments.length);
+
+					for (var k = 0; k < attachments.length; k++) {
+						var file = attachments[k];
+						folder.createFile(file);
+						//Logger.log("file created:  " + k);
+					}   
+					Logger.log("after file loop for:  " + k);
+                  
+					if(folder.getUrl()==""){
+						sheet.getRange(lastRow+1,6).setValue("https://docs.google.com/folderview?id="+createdFolderId+"&usp=drivesdk");
+					}else{
+						sheet.getRange(lastRow+1,6).setValue(folder.getUrl());
+					}
+					//end iterate
+
+					folder.setSharing(DriveApp.Access.ANYONE, DriveApp.Permission.EDIT);
+					Logger.log("shared folder name:  " + folder.getName());
+					Logger.log("shared folder folder.getUrl():  " + folder.getUrl());
+					Logger.log("lastRow+1:  " + lastRow+1);
+				}
+			}catch(err){
+				Logger.log("create folder catch err:  ");
+                		sheet.getRange(lastRow+1,6).setValue("Reference email from sender");
+			}
+					//wrap up - mark msg read and archive to remove from inbox.
+					messages[j].markRead();
+                    threads[i].addLabel(label);
+					threads[i].moveToArchive();
+          
+            				//nhl_logger_ack_email(messages[j], ss, lastRow);
+                    			Logger.log("first msg, thread marked read and moved to archive");
+				//} 
+			}
+		} //j=0 for	
+			
+			//msg is not initial submission, so ignore - mark read and archive.
+			//if(j>0 && messages.length>1 ){
+			if(j>0 || labelName == "logged"){
+				threads[i].markRead();	
+                threads[i].addLabel(label);
+				threads[i].moveToArchive();
+				Logger.log("msg.lgth>1, thread marked read and moved to archive");
+			}
+		}  //msg for		
+	}  //thread for
+	
+	//tweak for specific trafficker but may need to go into master account script
+	//nhl_logger_remove_closed(ss);
+  var lastrundate = new Date()
+  var listssheet = ss.getSheetByName("Lists");
+  listssheet.getRange(3,9).setValue(lastrundate);  
+}
+  function nhl_logger_remove_closed(sprdsht)
+  {
+    
+  //var sheet = ss.getSheets()[0];
+  var row = 2;
+  var timestampvalue = "";
+  var closedAckDate = new Date()
+    do{
+      //tweak for specific trafficker
+      sheet = sprdsht.getSheetByName("requests");
+      //var lastRow = sprdsht.getLastRow();
+      //sheet.getRange(lastRow+1,1).setValue("123"); 
+      //sheet.getRange(lastRow+1,2).setValue("456");
+      //getSheetValues(startRow, startColumn, numRows, numColumns)
+      timestampvalue = sheet.getRange(row,1).getValue();
+      //Logger.log("timestampvalue Values: " + timestampvalue);
+      
+      //check if col 11 is still the status
+      if(sheet.getRange(row,11).getValue() == "Closed" || sheet.getRange(row,11).getValue() == "closed"){
+        //update last value to num Cols
+        var rowvalues = sheet.getSheetValues(row, 1, 1, 17);  
+        //Logger.log("CLOSED Row Values: " + rowvalues);  
+        sheet.deleteRow(row);
+    
+        sheet = sprdsht.getSheetByName("closed requests");
+        lastRow = sheet.getLastRow();
+        //Logger.log("lastRow Value: " + lastRow);
+        
+        //need to add or remove if num of cols change
+        sheet.getRange(lastRow+1,1).setValue(rowvalues[0][0]);
+        sheet.getRange(lastRow+1,2).setValue(rowvalues[0][1]);
+        sheet.getRange(lastRow+1,3).setValue(rowvalues[0][2]);
+        sheet.getRange(lastRow+1,4).setValue(rowvalues[0][3]);
+        sheet.getRange(lastRow+1,5).setValue(rowvalues[0][4]);
+        sheet.getRange(lastRow+1,6).setValue(rowvalues[0][5]);
+        sheet.getRange(lastRow+1,7).setValue(rowvalues[0][6]);
+        sheet.getRange(lastRow+1,8).setValue(rowvalues[0][7]);
+        sheet.getRange(lastRow+1,9).setValue(rowvalues[0][8]);
+        sheet.getRange(lastRow+1,10).setValue(rowvalues[0][9]);
+        sheet.getRange(lastRow+1,11).setValue(rowvalues[0][10]);
+        sheet.getRange(lastRow+1,12).setValue(rowvalues[0][11]);
+        sheet.getRange(lastRow+1,13).setValue(rowvalues[0][12]);
+        sheet.getRange(lastRow+1,14).setValue(rowvalues[0][13]);
+        sheet.getRange(lastRow+1,15).setValue(rowvalues[0][14]);
+        sheet.getRange(lastRow+1,16).setValue(rowvalues[0][15]);
+        sheet.getRange(lastRow+1,17).setValue(rowvalues[0][16]);
+        Logger.log("Copied request from sender: " + rowvalues[0][2] + " | with Status: " + rowvalues[0][10]);
+        
+        nhl_logger_closed_email(rowvalues[0][2], rowvalues[0][1], sheet, closedAckDate, lastRow);
+        //sheet.getRange(lastRow+1,18).setValue(closedAckDate);
+        
+      }else{
+        Logger.log("Skipped request from sender: " + sheet.getRange(row,3).getValue() + " | with Status: " + sheet.getRange(row,10).getValue());
+        row=row+1
+        
+      }
+      //Logger.log("row Value: " + row);
+    }while( timestampvalue != "");
+    
+  }
+  
+  
+  
